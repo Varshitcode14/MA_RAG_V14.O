@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build
+dist/
+build/
+
+# Large datasets
+datasets/
+corpus/
+
+# Generated indexes
+T_RAG/indexes/
+MA_RAG/indexes/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+
+# IDE
+.vscode/
