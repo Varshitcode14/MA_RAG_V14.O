@@ -38,3 +38,31 @@ __pycache__/
 
 # IDE
 .vscode/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment
+.env
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated data
+corpus/
+datasets/
+results/
+T_RAG/indexes/
+MA_RAG/indexes/
+
+# FAISS
+*.faiss
+*.index
+*.pkl
