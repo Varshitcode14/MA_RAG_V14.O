@@ -1,7 +1,11 @@
+import os
+
 from utils.provider_manager import ProviderManager
 from MA_RAG.prompts.extractor_prompt import EXTRACTOR_PROMPT
 
 provider = ProviderManager()
+
+VERBOSE = os.getenv("MARAG_VERBOSE", "0") == "1"
 
 
 def extractor_agent(state):
@@ -30,10 +34,11 @@ Content:
 
     evidence = provider.generate(prompt)
 
-    print("\n" + "=" * 60)
-    print("EXTRACTED EVIDENCE")
-    print("=" * 60)
-    print(evidence)
+    if VERBOSE:
+        print("\n" + "=" * 60)
+        print("EXTRACTED EVIDENCE")
+        print("=" * 60)
+        print(evidence)
 
     state["evidence"] = evidence
 

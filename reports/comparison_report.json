@@ -1,0 +1,44 @@
+{
+  "traditional_rag": {
+    "exact_match": 0.0,
+    "token_f1": 0.28224757534591716,
+    "token_recall": 0.23541073448870656,
+    "semantic_similarity": 0.7596531023581823,
+    "precision_at_k": 0.4666666666666667,
+    "recall_at_k": 0.7777777777777778,
+    "hit_rate": 1.0,
+    "mrr": 0.9777777777777777,
+    "avg_total_time": 1.2528994000167586,
+    "avg_retrieval_time": 0.0,
+    "avg_generation_time": 0.0,
+    "avg_reasoning_steps": 1.0,
+    "judge_correctness_score": 0.525,
+    "judge_faithfulness_score": 0.75,
+    "judge_relevancy_score": 0.7
+  },
+  "ma_rag": {
+    "exact_match": 0.0,
+    "token_f1": 0.48929236912264257,
+    "token_recall": 0.4728854765003329,
+    "semantic_similarity": 0.905634472767512,
+    "precision_at_k": 0.43333333333333335,
+    "recall_at_k": 0.7222222222222221,
+    "hit_rate": 1.0,
+    "mrr": 0.9777777777777777,
+    "avg_total_time": 8.000564399998014,
+    "avg_retrieval_time": 0.0,
+    "avg_generation_time": 0.0,
+    "avg_reasoning_steps": 2.3666666666666667,
+    "judge_correctness_score": 0.7,
+    "judge_faithfulness_score": 0.9416666666666667,
+    "judge_relevancy_score": 0.9083333333333333
+  },
+  "win_loss": {
+    "traditional_wins": 5,
+    "ma_rag_wins": 21,
+    "ties": 4
+  },
+  "dataset": "datasets/ai_ml/multihop_qa.json",
+  "samples": 30,
+  "k": 5
+}

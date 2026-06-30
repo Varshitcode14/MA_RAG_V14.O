@@ -131,10 +131,10 @@ class ProviderManager:
             try:
                 result = self._invoke_bedrock(client, model_id, prompt, temperature)
                 if result:
-                    print(f"[Bedrock ✓] {model_id}")
+                    print(f"[Bedrock OK] {model_id}")
                     return result
             except Exception as e:
-                print(f"[Bedrock ✗] {model_id}: {str(e)[:100]}")
+                print(f"[Bedrock FAIL] {model_id}: {str(e)[:100]}")
                 time.sleep(0.5)
 
         return None
@@ -210,7 +210,7 @@ class ProviderManager:
         if result:
             return result
 
-        print("[ProviderManager] Groq + Cerebras exhausted → AWS Bedrock")
+        print("[ProviderManager] Groq + Cerebras exhausted -> AWS Bedrock")
         result = self._try_bedrock(prompt, temperature)
         if result:
             return result

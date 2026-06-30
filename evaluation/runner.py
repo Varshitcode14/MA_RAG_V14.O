@@ -143,6 +143,16 @@ def evaluate_predictions(
     ret_metrics = compute_retrieval_metrics(retrieved, relevant, k=k)
     metrics: dict = {**gen_metrics, **ret_metrics}
 
+    # ── Efficiency aggregates (present when the pipeline reports them) ──
+    def _avg(key: str) -> float:
+        vals = [p[key] for p in predictions if isinstance(p.get(key), (int, float))]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    metrics["avg_total_time"]      = _avg("total_time")
+    metrics["avg_retrieval_time"]  = _avg("retrieval_time")
+    metrics["avg_generation_time"] = _avg("generation_time")
+    metrics["avg_reasoning_steps"] = _avg("reasoning_steps")
+
     if use_llm_judge:
         print("\nRunning LLM-as-a-Judge ...")
         judged = batch_judge(
@@ -185,6 +195,8 @@ def print_metrics_report(metrics: dict, title: str = "Evaluation Results") -> No
     _LABELS = {
         "exact_match":              "Exact Match (EM)",
         "token_f1":                 "Token F1",
+        "token_recall":             "Token Recall (gold coverage)",
+        "semantic_similarity":      "Semantic Similarity",
         "precision_at_k":           "Precision@K",
         "recall_at_k":              "Recall@K",
         "hit_rate":                 "Hit Rate",
@@ -193,11 +205,20 @@ def print_metrics_report(metrics: dict, title: str = "Evaluation Results") -> No
         "judge_faithfulness_score": "LLM Judge — Faithfulness",
         "judge_relevancy_score":    "LLM Judge — Relevancy",
     }
+    _TIME_LABELS = {
+        "avg_total_time":      "Avg Latency (s)",
+        "avg_retrieval_time":  "Avg Retrieval (s)",
+        "avg_generation_time": "Avg Generation (s)",
+        "avg_reasoning_steps": "Avg Reasoning Steps",
+    }
     print(f"\n{'='*60}\n{title}\n{'='*60}")
     for key, label in _LABELS.items():
         if key in metrics:
             v = metrics[key]
             print(f"  {label:<38} {v:.4f}  ({v*100:.2f}%)")
+    for key, label in _TIME_LABELS.items():
+        if key in metrics:
+            print(f"  {label:<38} {metrics[key]:.3f}")
     print("=" * 60)
 
 

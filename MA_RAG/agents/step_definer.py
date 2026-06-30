@@ -1,8 +1,12 @@
+import os
+
 from utils.provider_manager import ProviderManager
 
 from MA_RAG.prompts.step_definer_prompt import STEP_DEFINER_PROMPT
 
 provider = ProviderManager()
+
+VERBOSE = os.getenv("MARAG_VERBOSE", "0") == "1"
 
 
 def step_definer_agent(state):
@@ -33,10 +37,11 @@ def step_definer_agent(state):
 
     query = provider.generate(prompt)
 
-    print("\n" + "=" * 60)
-    print("CURRENT SUBQUERY")
-    print("=" * 60)
-    print(query)
+    if VERBOSE:
+        print("\n" + "=" * 60)
+        print("CURRENT SUBQUERY")
+        print("=" * 60)
+        print(query)
 
     state["subquery"] = query
 

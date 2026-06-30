@@ -1,33 +1,44 @@
+import os
+
 from utils.provider_manager import ProviderManager
 
 provider = ProviderManager()
+
+VERBOSE = os.getenv("MARAG_VERBOSE", "0") == "1"
 
 FINAL_PROMPT = """
 You are the Final Answer Agent in a Multi-Agent RAG system.
 
 You are given:
 1. The user's original question.
-2. The reasoning history from previous agents.
+2. The reasoning history (each step's goal and its answer).
 
-Your task: give ONE concise, direct answer.
+Your task: synthesize ONE complete, self-contained answer to the
+original question using ONLY the reasoning history.
 
-CRITICAL RULES:
-- Return ONLY the answer — no sentences like "The answer is..." or "Based on the history..."
-- Match the expected answer format: if the question asks for a name, return just the name.
-  If it asks for a year, return just the year. If it asks for a comparison, be brief.
-- Maximum 15 words unless the question requires a longer comparison answer.
-- Use ONLY information from the reasoning history.
-- Do NOT add explanation or preamble.
+RULES:
+- Address EVERY part of the question. Multi-part questions (e.g. "name X
+  and the Y that replaced it", comparisons, multi-hop chains) require an
+  answer that covers all parts.
+- Match the expected answer format and length:
+    * A "what year / who / which" question → give the direct fact.
+    * A "how do X and Y differ" or "name X and the component that..."
+      question → answer in one or two complete sentences that state
+      every required fact.
+- Be factual and grounded ONLY in the reasoning history. Do not add
+  outside knowledge or speculation.
+- Do NOT include preamble such as "The answer is", "Based on the
+  history", or "According to". Start directly with the answer.
 
-Examples of CORRECT output:
-  Question: What year did AlexNet achieve a breakthrough?
-  Answer: 2012
+Examples:
 
-  Question: What models were trained using RLHF?
-  Answer: InstructGPT, ChatGPT, and Claude
+Question: What year did AlexNet achieve a breakthrough?
+Answer: 2012
 
-  Question: How do GPT and BERT differ in training?
-  Answer: GPT is trained autoregressively; BERT uses masked language model objective
+Question: The architecture in 'Attention Is All You Need' eliminated a
+sequential mechanism. Name it and the component that replaced it.
+Answer: It eliminated recurrence; self-attention replaced it, allowing all
+positions to be processed in parallel.
 
 Original Question:
 {question}
@@ -55,7 +66,7 @@ def final_answer_agent(state):
 
     answer = provider.generate(prompt, temperature=0)
 
-    # Strip any accidental preamble the LLM adds despite instructions
+    # Strip any accidental preamble the LLM adds despite instructions.
     for prefix in [
         "Final Answer:", "final answer:", "Answer:", "answer:",
         "The answer is", "Based on", "According to",
@@ -64,10 +75,11 @@ def final_answer_agent(state):
             answer = answer.strip()[len(prefix):].strip()
             break
 
-    print("\n" + "=" * 60)
-    print("FINAL ANSWER")
-    print("=" * 60)
-    print(answer)
+    if VERBOSE:
+        print("\n" + "=" * 60)
+        print("FINAL ANSWER")
+        print("=" * 60)
+        print(answer)
 
     state["final_answer"] = answer
     return state

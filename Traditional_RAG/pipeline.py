@@ -1,15 +1,11 @@
 """
 Traditional RAG pipeline.
 
-Workflow:
-    1. Query
-    2. Retrieve (reuses MA_RAG DenseRetriever via TraditionalRetriever)
-    3. Generate
-    4. Return standardized result dict
-
-The result schema is kept identical to the one returned by
-MA_RAG's pipeline so the evaluation layer can treat both
-systems transparently.
+Fix: TraditionalRAGPipeline is now a singleton-friendly class.
+The embedder and FAISS store are initialized ONCE when the pipeline
+is first created, then reused for all subsequent questions.
+This prevents the "paging file too small" Windows error that occurs
+when the embedding model is loaded fresh for every question.
 """
 
 import time
@@ -21,46 +17,23 @@ from Traditional_RAG.config import TOP_K
 
 class TraditionalRAGPipeline:
 
+    _instance = None  # module-level singleton
+
     def __init__(self) -> None:
-        self.retriever = TraditionalRetriever()
-        self.generator = TraditionalGenerator()
+        self.retriever  = TraditionalRetriever()
+        self.generator  = TraditionalGenerator()
 
     def answer(self, question: str, top_k: int = TOP_K) -> dict:
-        """
-        Run the full Traditional RAG pipeline for a single question.
-
-        Returns:
-            Standardized result dict (see schema below).
-
-        Result schema
-        -------------
-        {
-            "question":         str,
-            "answer":           str,
-            "retrieved_docs":   list[dict],
-            "retrieved_titles": list[str],
-            "context":          str,
-            "retrieval_time":   float,   # seconds
-            "generation_time":  float,   # seconds
-            "total_time":       float,   # seconds
-            "history":          list,    # always [] for Traditional RAG
-            "reasoning_steps":  int,     # always 1 for Traditional RAG
-            "pipeline":         str,     # "traditional_rag"
-        }
-        """
         total_start = time.perf_counter()
 
-        # ── 1. Retrieve ──────────────────────────────────────────────
         retrieval_start = time.perf_counter()
         docs = self.retriever.search(question, top_k=top_k)
         retrieval_time = time.perf_counter() - retrieval_start
 
-        # ── 2. Build context string (also stored in result) ──────────
         context = "\n\n".join(
             f"Title: {d['title']}\n{d['text']}" for d in docs
         )
 
-        # ── 3. Generate ──────────────────────────────────────────────
         generation_start = time.perf_counter()
         answer = self.generator.generate(question=question, docs=docs)
         generation_time = time.perf_counter() - generation_start
@@ -68,27 +41,36 @@ class TraditionalRAGPipeline:
         total_time = time.perf_counter() - total_start
 
         return {
-            "question": question,
-            "answer": answer,
-            "retrieved_docs": docs,
+            "question":         question,
+            "answer":           answer,
+            "retrieved_docs":   docs,
             "retrieved_titles": [d["title"] for d in docs],
-            "context": context,
-            "retrieval_time": retrieval_time,
-            "generation_time": generation_time,
-            "total_time": total_time,
-            "history": [],
-            "reasoning_steps": 1,
-            "pipeline": "traditional_rag",
+            "context":          context,
+            "retrieval_time":   retrieval_time,
+            "generation_time":  generation_time,
+            "total_time":       total_time,
+            "history":          [],
+            "reasoning_steps":  1,
+            "pipeline":         "traditional_rag",
         }
+
+
+# Module-level singleton — created once, reused across all questions
+_pipeline: TraditionalRAGPipeline | None = None
 
 
 def run(question: str, top_k: int = TOP_K) -> dict:
     """
-    Module-level convenience function.
+    Module-level entry point.
 
-    Usage:
-        from Traditional_RAG.pipeline import run
-        result = run("Who wrote Harry Potter?")
+    The pipeline (embedder + FAISS store) is initialized once on
+    first call and reused for all subsequent calls in the same process.
+    This is critical on Windows where repeated model loading exhausts
+    the paging file.
     """
-    pipeline = TraditionalRAGPipeline()
-    return pipeline.answer(question, top_k=top_k)
+    global _pipeline
+    if _pipeline is None:
+        print("Initializing Traditional RAG pipeline (once)...")
+        _pipeline = TraditionalRAGPipeline()
+        print("Pipeline ready.")
+    return _pipeline.answer(question, top_k=top_k)

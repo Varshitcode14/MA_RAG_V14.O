@@ -1,3 +1,12 @@
+import os
+
+# sentence-transformers / transformers will try to import a TensorFlow
+# backend if TF is present in the environment. With Keras 3 installed that
+# import crashes. We only need the PyTorch backend, so disable TF before
+# importing. (Must be set BEFORE transformers is first imported.)
+os.environ.setdefault("USE_TF", "0")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+
 from sentence_transformers import SentenceTransformer
 import numpy as np
 

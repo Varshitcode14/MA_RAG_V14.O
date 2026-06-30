@@ -4,13 +4,12 @@ MA-RAG pipeline entry point.
 Wraps the LangGraph graph invocation and normalizes the
 raw GraphState into the shared result schema.
 
-Key fix: retrieved_titles now collects titles from ALL reasoning
-steps (via history), not just the final step. This is required for
-retrieval metrics (Precision@K, Recall@K, Hit Rate, MRR) to be
-meaningful — in multi-hop RAG, relevant docs are retrieved at
-different steps.
-
-The graph itself (MA_RAG/core/graph.py) is NOT modified.
+retrieved_titles now collects unique titles from ALL reasoning steps
+(accumulated in GraphState.all_retrieved_titles by the retriever node).
+This is required for retrieval metrics (Precision@K, Recall@K, Hit Rate,
+MRR) to be meaningful — in multi-hop RAG, relevant docs are retrieved at
+different steps. Previously this used an undeclared state key that
+LangGraph silently dropped, so all MA-RAG retrieval metrics were 0.
 """
 
 import time
@@ -18,74 +17,33 @@ import time
 from MA_RAG.core.graph import graph
 
 
-def _collect_all_retrieved_titles(state: dict) -> list[str]:
-    """
-    Collect unique retrieved document titles across ALL reasoning steps.
-
-    MA-RAG retrieves documents at each step. The state only holds the
-    LAST step's retrieved_docs. We recover earlier steps' titles from
-    the history entries' evidence strings, but the most reliable source
-    is the final retrieved_docs combined with titles found in evidence.
-
-    Strategy:
-    1. Take titles from state["retrieved_docs"] (last step).
-    2. Parse any document titles mentioned in evidence across history.
-    3. Deduplicate preserving order.
-    """
-    seen: set[str] = set()
-    titles: list[str] = []
-
-    def _add(title: str) -> None:
-        if title and title not in seen:
-            seen.add(title)
-            titles.append(title)
-
-    # Last step's retrieved docs (always available)
-    for doc in state.get("retrieved_docs", []):
-        _add(doc.get("title", ""))
-
-    # Evidence strings in history mention "Source: DOCUMENT X" but not
-    # titles directly.  Instead we pull titles from step_answers context
-    # by looking at the evidence field stored in history items.
-    # The cleaner source: every node in the graph calls retrieve_documents
-    # which sets state["retrieved_docs"].  Since LangGraph doesn't track
-    # per-step state snapshots we can't recover earlier steps' docs.
-    #
-    # Best available signal: the plan goals themselves contain topic keywords
-    # that match document titles — but that's too fragile.
-    #
-    # Practical fix: store all retrieved titles in a running list inside
-    # the initial state and accumulate across steps via a custom key.
-    # Since we can't modify the graph without a code change, we use the
-    # ALL_RETRIEVED_TITLES key we inject into initial_state below and
-    # read back here.
-
-    for title in state.get("_all_retrieved_titles", []):
-        _add(title)
-
-    return titles
-
-
 def _normalize(state: dict, total_time: float) -> dict:
     """Convert raw GraphState to the shared result schema."""
-    retrieved_docs: list[dict] = state.get("retrieved_docs", [])
 
-    # Use the accumulated list that was built across all steps
-    all_titles = _collect_all_retrieved_titles(state)
+    # Titles/docs accumulated across every reasoning step.
+    all_titles: list[str] = state.get("all_retrieved_titles", [])
+    all_docs: list[dict] = state.get("all_retrieved_docs", [])
 
+    # Context is built from every document seen across all steps so the
+    # faithfulness judge sees the full evidence MA-RAG actually used.
     context = "\n\n".join(
         f"Title: {d.get('title', '')}\n{d.get('text', '')}"
-        for d in retrieved_docs
+        for d in all_docs
     )
+
+    retrieval_time = float(state.get("retrieval_time", 0.0))
+    # Everything that is not retrieval is dominated by LLM generation
+    # across the planner / step-definer / extractor / qa / final agents.
+    generation_time = max(total_time - retrieval_time, 0.0)
 
     return {
         "question":         state.get("question", ""),
         "answer":           state.get("final_answer", ""),
-        "retrieved_docs":   retrieved_docs,
+        "retrieved_docs":   all_docs,
         "retrieved_titles": all_titles,
         "context":          context,
-        "retrieval_time":   0.0,
-        "generation_time":  0.0,
+        "retrieval_time":   retrieval_time,
+        "generation_time":  generation_time,
         "total_time":       total_time,
         "history":          state.get("history", []),
         "reasoning_steps":  len(state.get("plan", [])),
@@ -101,18 +59,20 @@ def run(question: str) -> dict:
         Standardized result dict.
     """
     initial_state = {
-        "question":               question,
-        "plan":                   [],
-        "current_step":           0,
-        "current_goal":           "",
-        "subquery":               "",
-        "retrieved_docs":         [],
-        "evidence":               "",
-        "step_answers":           [],
-        "history":                [],
-        "current_answer":         "",
-        "final_answer":           "",
-        "_all_retrieved_titles":  [],  # accumulates across steps (see nodes patch)
+        "question":             question,
+        "plan":                 [],
+        "current_step":         0,
+        "current_goal":         "",
+        "subquery":             "",
+        "retrieved_docs":       [],
+        "evidence":             "",
+        "step_answers":         [],
+        "history":              [],
+        "current_answer":       "",
+        "final_answer":         "",
+        "all_retrieved_titles": [],
+        "all_retrieved_docs":   [],
+        "retrieval_time":       0.0,
     }
 
     start = time.perf_counter()

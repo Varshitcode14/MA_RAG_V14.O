@@ -86,39 +86,98 @@ def answer_correctness(prediction: str, gold: str) -> dict[str, float]:
     }
 
 
+# ── Verbosity-robust metrics ─────────────────────────────────────────
+
+def token_recall(prediction: str, gold: str) -> float:
+    """
+    Token recall: fraction of gold tokens covered by the prediction.
+
+    Unlike token F1 this does not penalize a prediction for being longer
+    than the gold answer, so it is fair to systems that produce complete,
+    self-contained answers (e.g. multi-hop synthesis).
+    """
+    pred_tokens = _tokenize(prediction)
+    gold_tokens = _tokenize(gold)
+    if not gold_tokens:
+        return 0.0
+    common = Counter(pred_tokens) & Counter(gold_tokens)
+    return sum(common.values()) / len(gold_tokens)
+
+
+# Lazy, cached sentence embedder shared with the retrieval stack.
+_EMBEDDER = None
+
+
+def _get_embedder():
+    global _EMBEDDER
+    if _EMBEDDER is None:
+        from MA_RAG.retrieval.embedder import Embedder
+        _EMBEDDER = Embedder()
+    return _EMBEDDER
+
+
+def semantic_similarity(prediction: str, gold: str) -> float:
+    """
+    Cosine similarity between sentence embeddings of prediction and gold.
+
+    Verbosity-robust and meaning-aware (BERTScore-style signal): rewards
+    answers that convey the same meaning regardless of exact wording or
+    length. Returns a float in [0, 1] (negatives clamped to 0).
+    """
+    if not prediction or not gold:
+        return 0.0
+    embedder = _get_embedder()
+    pred_vec = embedder.encode(prediction)[0]
+    gold_vec = embedder.encode(gold)[0]
+    # Embeddings are L2-normalized, so dot product == cosine similarity.
+    sim = float((pred_vec * gold_vec).sum())
+    return max(0.0, min(1.0, sim))
+
+
 # ── Batch helpers ────────────────────────────────────────────────────
 
 def compute_generation_metrics(
     predictions: list[str],
     gold_answers: list[str],
+    include_semantic: bool = True,
 ) -> dict[str, float]:
     """
-    Compute EM and F1 over a list of predictions.
+    Compute generation metrics over a list of predictions.
 
     Args:
-        predictions:  One predicted answer per question.
-        gold_answers: One gold answer per question.
+        predictions:      One predicted answer per question.
+        gold_answers:     One gold answer per question.
+        include_semantic: Whether to compute embedding-based semantic
+                          similarity (loads the sentence-transformer).
 
     Returns:
-        {"exact_match": float, "token_f1": float}  — macro-averaged.
+        Macro-averaged dict with keys:
+            exact_match, token_f1, token_recall, semantic_similarity
     """
     if not predictions:
-        return {"exact_match": 0.0, "token_f1": 0.0}
+        base = {"exact_match": 0.0, "token_f1": 0.0, "token_recall": 0.0}
+        if include_semantic:
+            base["semantic_similarity"] = 0.0
+        return base
 
-    em_scores = [
-        float(exact_match(p, g))
-        for p, g in zip(predictions, gold_answers)
-    ]
-    f1_scores = [
-        token_f1(p, g)
-        for p, g in zip(predictions, gold_answers)
-    ]
     n = len(predictions)
+    em_scores = [float(exact_match(p, g)) for p, g in zip(predictions, gold_answers)]
+    f1_scores = [token_f1(p, g) for p, g in zip(predictions, gold_answers)]
+    rec_scores = [token_recall(p, g) for p, g in zip(predictions, gold_answers)]
 
-    return {
+    metrics = {
         "exact_match": sum(em_scores) / n,
         "token_f1": sum(f1_scores) / n,
+        "token_recall": sum(rec_scores) / n,
     }
+
+    if include_semantic:
+        sem_scores = [
+            semantic_similarity(p, g) for p, g in zip(predictions, gold_answers)
+        ]
+        metrics["semantic_similarity"] = sum(sem_scores) / n
+
+    return metrics
 
 
 # ── RAGAS-compatible stubs ───────────────────────────────────────────

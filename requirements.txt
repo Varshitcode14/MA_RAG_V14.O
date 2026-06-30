@@ -2,11 +2,12 @@ python-dotenv
 groq
 cerebras-cloud-sdk
 openai
+boto3
 requests
 datasets
 sentence-transformers
 faiss-cpu
 tqdm
 numpy
-cerebras-cloud-sdk
 langgraph
+matplotlib
